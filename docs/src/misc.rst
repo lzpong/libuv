@@ -197,8 +197,7 @@ API
     `UV_EINVAL` is returned. If `size` cannot accommodate the process title and
     terminating `NULL` character, the function returns `UV_ENOBUFS`.
 
-    .. warning::
-        `uv_get_process_title` is not thread safe on any platform except Windows.
+    .. versionchanged:: 1.18.1 now thread-safe on all supported platforms.
 
 .. c:function:: int uv_set_process_title(const char* title)
 
@@ -208,8 +207,7 @@ API
     larger than the available space. Other platforms will return `UV_ENOMEM` if
     they cannot allocate enough space to duplicate the contents of `title`.
 
-    .. warning::
-        `uv_set_process_title` is not thread safe on any platform except Windows.
+    .. versionchanged:: 1.18.1 now thread-safe on all supported platforms.
 
 .. c:function:: int uv_resident_set_memory(size_t* rss)
 
@@ -226,6 +224,12 @@ API
     .. note::
         On Windows not all fields are set, the unsupported fields are filled with zeroes.
         See :c:type:`uv_rusage_t` for more details.
+
+.. c:function:: uv_pid_t uv_os_getpid(void)
+
+    Returns the current process ID.
+
+    .. versionadded:: 1.18.0
 
 .. c:function:: uv_pid_t uv_os_getppid(void)
 

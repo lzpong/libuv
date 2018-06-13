@@ -142,6 +142,7 @@ extern "C" {
   XX(EHOSTDOWN, "host is down")                                               \
   XX(EREMOTEIO, "remote I/O error")                                           \
   XX(ENOTTY, "inappropriate ioctl for device")                                \
+  XX(EFTYPE, "inappropriate file type or format")                             \
 
 #define UV_HANDLE_TYPE_MAP(XX)                                                \
   XX(ASYNC, async)                                                            \
@@ -378,8 +379,7 @@ UV_EXTERN const char* uv_err_name(int err);
   /* read-only */                                                             \
   uv_req_type type;                                                           \
   /* private */                                                               \
-  void* active_queue[2];                                                      \
-  void* reserved[4];                                                          \
+  void* reserved[6];                                                          \
   UV_REQ_PRIVATE_FIELDS                                                       \
 
 /* Abstract base class of all requests. */
@@ -425,7 +425,17 @@ struct uv_handle_s {
 };
 
 UV_EXTERN size_t uv_handle_size(uv_handle_type type);
+UV_EXTERN uv_handle_type uv_handle_get_type(const uv_handle_t* handle);
+UV_EXTERN const char* uv_handle_type_name(uv_handle_type type);
+UV_EXTERN void* uv_handle_get_data(const uv_handle_t* handle);
+UV_EXTERN uv_loop_t* uv_handle_get_loop(const uv_handle_t* handle);
+UV_EXTERN void uv_handle_set_data(uv_handle_t* handle, void* data);
+
 UV_EXTERN size_t uv_req_size(uv_req_type type);
+UV_EXTERN void* uv_req_get_data(const uv_req_t* req);
+UV_EXTERN void uv_req_set_data(uv_req_t* req, void* data);
+UV_EXTERN uv_req_type uv_req_get_type(const uv_req_t* req);
+UV_EXTERN const char* uv_req_type_name(uv_req_type type);
 
 UV_EXTERN int uv_is_active(const uv_handle_t* handle);
 
@@ -465,6 +475,8 @@ struct uv_stream_s {
   UV_STREAM_FIELDS
 };
 
+UV_EXTERN size_t uv_stream_get_write_queue_size(const uv_stream_t* stream);
+
 UV_EXTERN int uv_listen(uv_stream_t* stream, int backlog, uv_connection_cb cb);
 UV_EXTERN int uv_accept(uv_stream_t* server, uv_stream_t* client);
 
@@ -492,7 +504,7 @@ UV_EXTERN int uv_try_write(uv_stream_t* handle,
 struct uv_write_s {
   UV_REQ_FIELDS
   uv_write_cb cb;
-  uv_stream_t* send_handle;
+  uv_stream_t* send_handle; /* TODO: make private and unix-only in v2.x. */
   uv_stream_t* handle;
   UV_WRITE_PRIVATE_FIELDS
 };
@@ -642,6 +654,8 @@ UV_EXTERN int uv_udp_recv_start(uv_udp_t* handle,
                                 uv_alloc_cb alloc_cb,
                                 uv_udp_recv_cb recv_cb);
 UV_EXTERN int uv_udp_recv_stop(uv_udp_t* handle);
+UV_EXTERN size_t uv_udp_get_send_queue_size(const uv_udp_t* handle);
+UV_EXTERN size_t uv_udp_get_send_queue_count(const uv_udp_t* handle);
 
 
 /*
@@ -852,7 +866,13 @@ typedef enum {
    * flags may be specified to create a duplex data stream.
    */
   UV_READABLE_PIPE  = 0x10,
-  UV_WRITABLE_PIPE  = 0x20
+  UV_WRITABLE_PIPE  = 0x20,
+
+  /*
+   * Open the child pipe handle in overlapped mode on Windows.
+   * On Unix it is silently ignored.
+   */
+  UV_OVERLAPPED_PIPE = 0x40
 } uv_stdio_flags;
 
 typedef struct uv_stdio_container_s {
@@ -962,6 +982,7 @@ UV_EXTERN int uv_spawn(uv_loop_t* loop,
                        const uv_process_options_t* options);
 UV_EXTERN int uv_process_kill(uv_process_t*, int signum);
 UV_EXTERN int uv_kill(int pid, int signum);
+UV_EXTERN uv_pid_t uv_process_get_pid(const uv_process_t*);
 
 
 /*
@@ -1070,6 +1091,7 @@ UV_EXTERN int uv_os_homedir(char* buffer, size_t* size);
 UV_EXTERN int uv_os_tmpdir(char* buffer, size_t* size);
 UV_EXTERN int uv_os_get_passwd(uv_passwd_t* pwd);
 UV_EXTERN void uv_os_free_passwd(uv_passwd_t* pwd);
+UV_EXTERN uv_pid_t uv_os_getpid(void);
 UV_EXTERN uv_pid_t uv_os_getppid(void);
 
 UV_EXTERN int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count);
@@ -1134,6 +1156,12 @@ struct uv_fs_s {
   UV_FS_PRIVATE_FIELDS
 };
 
+UV_EXTERN uv_fs_type uv_fs_get_type(const uv_fs_t*);
+UV_EXTERN ssize_t uv_fs_get_result(const uv_fs_t*);
+UV_EXTERN void* uv_fs_get_ptr(const uv_fs_t*);
+UV_EXTERN const char* uv_fs_get_path(const uv_fs_t*);
+UV_EXTERN uv_stat_t* uv_fs_get_statbuf(uv_fs_t*);
+
 UV_EXTERN void uv_fs_req_cleanup(uv_fs_t* req);
 UV_EXTERN int uv_fs_close(uv_loop_t* loop,
                           uv_fs_t* req,
@@ -1168,6 +1196,18 @@ UV_EXTERN int uv_fs_write(uv_loop_t* loop,
  * destination already exists.
  */
 #define UV_FS_COPYFILE_EXCL   0x0001
+
+/*
+ * This flag can be used with uv_fs_copyfile() to attempt to create a reflink.
+ * If copy-on-write is not supported, a fallback copy mechanism is used.
+ */
+#define UV_FS_COPYFILE_FICLONE 0x0002
+
+/*
+ * This flag can be used with uv_fs_copyfile() to attempt to create a reflink.
+ * If copy-on-write is not supported, an error is returned.
+ */
+#define UV_FS_COPYFILE_FICLONE_FORCE 0x0004
 
 UV_EXTERN int uv_fs_copyfile(uv_loop_t* loop,
                              uv_fs_t* req,
@@ -1509,12 +1549,17 @@ struct uv_loop_s {
   /* Loop reference counting. */
   unsigned int active_handles;
   void* handle_queue[2];
-  void* active_reqs[2];
+  union {
+    void* unused[2];
+    unsigned int count;
+  } active_reqs;
   /* Internal flag to signal loop stop. */
   unsigned int stop_flag;
   UV_LOOP_PRIVATE_FIELDS
 };
 
+UV_EXTERN void* uv_loop_get_data(const uv_loop_t*);
+UV_EXTERN void uv_loop_set_data(uv_loop_t*, void* data);
 
 /* Don't export the private CPP symbols. */
 #undef UV_HANDLE_TYPE_PRIVATE
@@ -1535,6 +1580,7 @@ struct uv_loop_s {
 #undef UV_SIGNAL_PRIVATE_FIELDS
 #undef UV_LOOP_PRIVATE_FIELDS
 #undef UV_LOOP_PRIVATE_PLATFORM_FIELDS
+#undef UV__ERR
 
 #ifdef __cplusplus
 }
