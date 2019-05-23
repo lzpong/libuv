@@ -239,9 +239,9 @@ static int uv__process_open_stream(uv_stdio_container_t* container,
 
   flags = 0;
   if (container->flags & UV_WRITABLE_PIPE)
-    flags |= UV_STREAM_READABLE;
+    flags |= UV_HANDLE_READABLE;
   if (container->flags & UV_READABLE_PIPE)
-    flags |= UV_STREAM_WRITABLE;
+    flags |= UV_HANDLE_WRITABLE;
 
   return uv__stream_open(container->data.stream, pipefds[0], flags);
 }
@@ -315,7 +315,7 @@ static void uv__process_child_init(const uv_process_options_t* options,
         use_fd = open("/dev/null", fd == 0 ? O_RDONLY : O_RDWR);
         close_fd = use_fd;
 
-        if (use_fd == -1) {
+        if (use_fd < 0) {
           uv__write_int(error_fd, UV__ERR(errno));
           _exit(127);
         }
@@ -431,6 +431,8 @@ int uv_spawn(uv_loop_t* loop,
                               UV_PROCESS_SETGID |
                               UV_PROCESS_SETUID |
                               UV_PROCESS_WINDOWS_HIDE |
+                              UV_PROCESS_WINDOWS_HIDE_CONSOLE |
+                              UV_PROCESS_WINDOWS_HIDE_GUI |
                               UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS)));
 
   uv__handle_init(loop, (uv_handle_t*)process, UV_PROCESS);
